@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/json-server/schema.json",
+  "posts": [
+    {
+      "id": "2",
+      "title": "another title",
+      "views": 200
+    },
+    {
+      "title": "uia",
+      "views": 0,
+      "id": "VjkbZq3"
+    },
+    {
+      "title": "ahii",
+      "views": 200,
+      "id": "eAjjBm1"
+    }
+  ],
+  "comments": [],
+  "profile": {
+    "name": "typicode"
+  }
+}

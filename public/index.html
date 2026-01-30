@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quản lý bài viết</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+
+  <body>
+    <div class="container">
+      <h2>➕ Thêm bài viết</h2>
+      <div class="form-group">
+        <input type="text" id="title" placeholder="Nhập tiêu đề bài viết..." />
+        <input type="number" id="views" placeholder="Views" min="0" />
+        <button class="btn-primary" onclick="addPost()">Thêm</button>
+      </div>
+
+      <hr />
+
+      <h2>📄 Danh sách bài viết</h2>
+      <ul id="posts"></ul>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+      const API_POSTS = "http://localhost:3000/posts";
+      const API_COMMENTS = "http://localhost:3000/comments";
+
+      // Fetch posts with embedded comments
+      function loadPosts() {
+        fetch(`${API_POSTS}?_embed=comments`)
+          .then((res) => res.json())
+          .then((posts) => {
+            const ul = document.getElementById("posts");
+            ul.innerHTML = "";
+
+            posts.forEach((p, index) => {
+              const li = document.createElement("li");
+              const isDeleted = p.isDeleted || false; // Handle hypothetical soft delete if needed, though we do hard delete
+
+              // Calculate Views
+              const viewsDisplay = p.views !== undefined ? p.views : 0;
+
+              // Generate Comments Component
+              const commentsHtml = p.comments
+                .map(
+                  (c) => `
+                  <div class="comment-item">
+                    <span>${c.body}</span>
+                    <button class="btn-sm-delete" onclick="deleteComment('${c.id}')" title="Xoá bình luận">✕</button>
+                  </div>
+                `
+                )
+                .join("");
+
+              li.innerHTML = `
+                <!-- View Mode -->
+                <div id="post-view-${p.id}" class="post-content ${isDeleted ? "deleted" : ""}">
+                  <div class="post-info">
+                    <span class="post-title">${index + 1}. ${p.title}</span>
+                    <span class="post-views">👁 ${viewsDisplay} lượt xem</span>
+                  </div>
+                  <div class="post-actions">
+                    <button class="btn-edit" onclick="toggleEdit('${p.id}')">Sửa</button>
+                    <button class="btn-danger" onclick="deletePost('${p.id}')">Xoá</button>
+                  </div>
+                </div>
+
+                <!-- Edit Mode (Hidden by default) -->
+                <div id="post-edit-${p.id}" class="edit-form hidden">
+                  <input type="text" id="edit-title-${p.id}" value="${p.title}" placeholder="Tiêu đề" />
+                  <input type="number" id="edit-views-${p.id}" value="${viewsDisplay}" placeholder="Lượt xem" />
+                  <div class="edit-form-actions">
+                     <button class="btn-secondary" onclick="toggleEdit('${p.id}')">Hủy</button>
+                     <button class="btn-save" onclick="saveEdit('${p.id}')">Lưu</button>
+                  </div>
+                </div>
+
+                <!-- Comments Section -->
+                <div class="comments-section">
+                  <div class="comments-header">💬 Bình luận (${p.comments.length})</div>
+                  <div class="comment-list" id="comment-list-${p.id}">
+                    ${commentsHtml}
+                  </div>
+                  <div class="comment-input-group">
+                    <input type="text" id="comment-input-${p.id}" placeholder="Viết bình luận..." onkeypress="handleCommentEnter(event, '${p.id}')">
+                    <button class="btn-primary" onclick="addComment('${p.id}')">Gửi</button>
+                  </div>
+                </div>
+              `;
+
+              ul.appendChild(li);
+            });
+          });
+      }
+
+      // Add Post
+      function addPost() {
+        const title = document.getElementById("title").value;
+        const viewsInput = document.getElementById("views").value;
+        const views = viewsInput ? parseInt(viewsInput) : 0;
+
+        if (!title) {
+          alert("Nhập tiêu đề!");
+          return;
+        }
+
+        fetch(API_POSTS, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, views }),
+        }).then(() => {
+          document.getElementById("title").value = "";
+          document.getElementById("views").value = "";
+          loadPosts();
+        });
+      }
+
+      // Delete Post
+      function deletePost(id) {
+        if (!confirm("Bạn có chắc muốn xoá bài viết này?")) return;
+        fetch(`${API_POSTS}/${id}`, { method: "DELETE" }).then(() => loadPosts());
+      }
+
+      // Toggle Edit Mode
+      function toggleEdit(id) {
+        const viewMode = document.getElementById(`post-view-${id}`);
+        const editMode = document.getElementById(`post-edit-${id}`);
+        viewMode.classList.toggle("hidden");
+        editMode.classList.toggle("hidden");
+      }
+
+      // Save Edited Post
+      function saveEdit(id) {
+        const newTitle = document.getElementById(`edit-title-${id}`).value;
+        const newViews = document.getElementById(`edit-views-${id}`).value;
+
+        if (!newTitle) {
+          alert("Tiêu đề không được để trống!");
+          return;
+        }
+
+        fetch(`${API_POSTS}/${id}`, {
+          method: "PATCH", // Use PATCH to update only changed fields
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: newTitle,
+            views: parseInt(newViews) || 0
+          }),
+        }).then(() => loadPosts());
+      }
+
+      // Add Comment
+      function addComment(postId) {
+        const input = document.getElementById(`comment-input-${postId}`);
+        const body = input.value.trim();
+
+        if (!body) return;
+
+        fetch(API_COMMENTS, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postId, body }),
+        }).then(() => {
+          input.value = ""; // Clear input
+          loadPosts(); // Reload to show new comment (or we could optimally just append it)
+        });
+      }
+
+      function handleCommentEnter(event, postId) {
+        if (event.key === "Enter") {
+          addComment(postId);
+        }
+      }
+
+      // Delete Comment
+      function deleteComment(commentId) {
+        if (!confirm("Xoá bình luận này?")) return;
+        fetch(`${API_COMMENTS}/${commentId}`, { method: "DELETE" }).then(() => loadPosts());
+      }
+
+      // Initial Load
+      loadPosts();
+    </script>
+  </body>
+</html>
